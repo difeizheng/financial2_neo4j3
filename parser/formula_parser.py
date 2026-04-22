@@ -63,6 +63,8 @@ def parse_formula_refs(formula: str, current_sheet: str) -> list[str]:
 
     # Strip leading '=' and remove string literals to avoid false matches
     cleaned = re.sub(r'"[^"]*"', '""', formula[1:])
+    # Strip $ (absolute reference markers) — irrelevant for dependency tracking
+    cleaned = cleaned.replace("$", "")
 
     # 1. Cross-sheet ranges: Sheet!A1:B3
     for m in _CROSS_SHEET_RANGE.finditer(cleaned):

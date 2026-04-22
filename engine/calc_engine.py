@@ -155,7 +155,7 @@ class CalcEngine:
         """Return computed value or None if formula cannot be evaluated."""
         if not formula or not formula.startswith("="):
             return None
-        expr = formula[1:]
+        expr = formula[1:].replace("$", "")
         try:
             return self._eval_expr(expr, cell_values, current_sheet)
         except Exception:

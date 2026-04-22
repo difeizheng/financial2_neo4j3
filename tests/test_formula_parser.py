@@ -56,3 +56,46 @@ def test_2d_range():
     assert "Sheet1_5_B" in refs
     assert "Sheet1_5_C" in refs
     assert len(refs) == 4
+
+
+# --- $ absolute reference tests ---
+
+def test_local_absolute_ref():
+    refs = parse_formula_refs("=$I$250", "参数输入表")
+    assert "参数输入表_250_I" in refs
+
+
+def test_local_absolute_col_only():
+    refs = parse_formula_refs("=$I250", "参数输入表")
+    assert "参数输入表_250_I" in refs
+
+
+def test_local_absolute_row_only():
+    refs = parse_formula_refs("=I$250", "参数输入表")
+    assert "参数输入表_250_I" in refs
+
+
+def test_cross_sheet_absolute_ref():
+    refs = parse_formula_refs("=参数输入表!$I$250", "表1-资金筹措及还本付息表")
+    assert "参数输入表_250_I" in refs
+    assert "表1-资金筹措及还本付息表_250_I" not in refs
+
+
+def test_cross_sheet_absolute_range():
+    refs = parse_formula_refs("=SUM(参数输入表!$I$250:$I$260)", "表1-资金筹措及还本付息表")
+    assert len(refs) == 11
+    assert "参数输入表_250_I" in refs
+    assert "参数输入表_260_I" in refs
+
+
+def test_mixed_absolute_and_relative():
+    # The reported bug formula (simplified)
+    refs = parse_formula_refs(
+        "=IF(AP3-参数输入表!$I$250<=0,0,1)",
+        "表1-资金筹措及还本付息表"
+    )
+    assert "参数输入表_250_I" in refs
+    assert "表1-资金筹措及还本付息表_3_AP" in refs
+    # Must NOT create a wrong local ref for the cross-sheet reference
+    assert "表1-资金筹措及还本付息表_250_I" not in refs
+    assert "表1-资金筹措及还本付息表_251_I" not in refs
