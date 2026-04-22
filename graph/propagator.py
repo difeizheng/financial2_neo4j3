@@ -67,6 +67,76 @@ class Propagator:
 
         return updated
 
+    def dry_run_with_comparison(self, changes: dict[str, Any]) -> dict[str, dict[str, Any]]:
+        """Simulate propagation without writing to Neo4j.
+
+        Returns: {cell_id: {"old": old_value, "new": new_value, "formula": formula_raw}}
+        """
+        if not changes:
+            return {}
+
+        downstream = self._find_downstream(list(changes.keys()))
+        subgraph = self._fetch_subgraph(list(changes.keys()) + list(downstream))
+        order = self._topo_sort(subgraph)
+
+        all_ids = list(subgraph.keys())
+        cell_values = self._fetch_values(all_ids)
+        old_values = dict(cell_values)
+
+        cell_values.update(changes)
+
+        updated: dict[str, Any] = dict(changes)
+        for cell_id in order:
+            if cell_id in changes:
+                continue
+            formula, sheet = self._fetch_formula(cell_id)
+            if not formula:
+                continue
+            new_val = self._engine.evaluate(formula, cell_values, sheet)
+            if new_val is not None and new_val != cell_values.get(cell_id):
+                cell_values[cell_id] = new_val
+                updated[cell_id] = new_val
+
+        result: dict[str, dict[str, Any]] = {}
+        for cid, new_val in updated.items():
+            formula, _ = self._fetch_formula(cid)
+            result[cid] = {
+                "old": old_values.get(cid),
+                "new": new_val,
+                "formula": formula,
+            }
+        return result
+
+    def propagate_with_trace(self, changes: dict[str, Any]) -> tuple[dict[str, Any], list[str]]:
+        """Apply changes and return (updated_values, topo_order)."""
+        if not changes:
+            return {}, []
+
+        downstream = self._find_downstream(list(changes.keys()))
+        subgraph = self._fetch_subgraph(list(changes.keys()) + list(downstream))
+        order = self._topo_sort(subgraph)
+
+        all_ids = list(subgraph.keys())
+        cell_values = self._fetch_values(all_ids)
+        cell_values.update(changes)
+
+        updated: dict[str, Any] = dict(changes)
+        for cell_id in order:
+            if cell_id in changes:
+                continue
+            formula, sheet = self._fetch_formula(cell_id)
+            if not formula:
+                continue
+            new_val = self._engine.evaluate(formula, cell_values, sheet)
+            if new_val is not None and new_val != cell_values.get(cell_id):
+                cell_values[cell_id] = new_val
+                updated[cell_id] = new_val
+
+        if updated:
+            self._write_values(updated)
+
+        return updated, order
+
     # ------------------------------------------------------------------
     # Graph traversal helpers
     # ------------------------------------------------------------------
@@ -111,12 +181,6 @@ class Propagator:
 
     def _topo_sort(self, graph: dict[str, list[str]]) -> list[str]:
         """Kahn's algorithm topological sort. graph: {node: [dependencies]}."""
-        in_degree: dict[str, int] = {n: 0 for n in graph}
-        for node, deps in graph.items():
-            for d in deps:
-                if d in in_degree:
-                    in_degree[node] += 1  # node depends on d → d must come first
-
         # Rebuild: reverse edges so we can do Kahn's properly
         # in_degree[n] = number of dependencies of n that are in the subgraph
         in_deg: dict[str, int] = {n: 0 for n in graph}

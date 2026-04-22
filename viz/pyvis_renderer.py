@@ -179,6 +179,102 @@ def render_sheet_overview(client: Neo4jClient,
     return output_path
 
 
+def render_cross_sheet_graph(client: Neo4jClient,
+                              output_path: Optional[str] = None,
+                              height: str = "600px") -> str:
+    """Render sheet-level dependency graph with weighted edges."""
+    rows = client.run("""
+        MATCH (src:Cell)-[:DEPENDS_ON]->(tgt:Cell)
+        WHERE src.sheet <> tgt.sheet
+        RETURN src.sheet AS src_sheet, tgt.sheet AS tgt_sheet, count(*) AS weight
+    """)
+
+    sheets = client.run("MATCH (s:Sheet) RETURN s.id AS id")
+    sheet_ids = [r["id"] for r in sheets if r["id"]]
+
+    net = Network(height=height, width="100%", directed=True,
+                  bgcolor="#1a1a2e", font_color="white")
+    net.set_options("""
+    {
+      "physics": {"stabilization": {"iterations": 100}},
+      "edges": {"arrows": {"to": {"enabled": true, "scaleFactor": 0.6}},
+                "scaling": {"min": 1, "max": 10}}
+    }
+    """)
+
+    for sid in sheet_ids:
+        net.add_node(sid, label=sid, color=_COLORS["Sheet"], size=20, shape="box")
+
+    for r in rows:
+        src, tgt = r.get("src_sheet"), r.get("tgt_sheet")
+        if not src or not tgt:
+            continue
+        net.add_edge(src, tgt,
+                     value=r["weight"],
+                     title=f"{r['weight']} 条依赖",
+                     color="#F5A623")
+
+    if output_path is None:
+        tmp = tempfile.NamedTemporaryFile(suffix=".html", delete=False)
+        output_path = tmp.name
+
+    net.save_graph(output_path)
+    return output_path
+
+
+def render_propagation_chain(client: Neo4jClient,
+                              topo_order: list[str],
+                              changes: dict,
+                              output_path: Optional[str] = None,
+                              height: str = "600px") -> str:
+    """Render the propagation chain in topological order."""
+    if not topo_order:
+        return ""
+
+    cell_ids = list(topo_order)[:100]
+    rows = client.run(
+        "MATCH (c:Cell) WHERE c.id IN $ids RETURN c {.*} AS cell",
+        ids=cell_ids,
+    )
+    cell_map = {r["cell"]["id"]: r["cell"] for r in rows}
+
+    edges = client.run(
+        """
+        MATCH (src:Cell)-[:DEPENDS_ON]->(tgt:Cell)
+        WHERE src.id IN $ids AND tgt.id IN $ids
+        RETURN src.id AS src, tgt.id AS tgt
+        """,
+        ids=cell_ids,
+    )
+
+    net = Network(height=height, width="100%", directed=True,
+                  bgcolor="#1a1a2e", font_color="white")
+    net.set_options("""
+    {
+      "layout": {"hierarchical": {"enabled": true, "direction": "LR", "sortMethod": "directed"}},
+      "physics": {"enabled": false},
+      "edges": {"arrows": {"to": {"enabled": true, "scaleFactor": 0.5}}}
+    }
+    """)
+
+    seed_ids = set(changes.keys())
+    for i, cid in enumerate(cell_ids):
+        cell = cell_map.get(cid, {"id": cid})
+        color = "#FFD700" if cid in seed_ids else _cell_color(cell)
+        net.add_node(cid, label=_cell_label(cell), title=f"#{i+1} {_cell_title(cell)}",
+                     color=color, size=18 if cid in seed_ids else 12, level=i)
+
+    for r in edges:
+        net.add_edge(r["src"], r["tgt"])
+
+    if output_path is None:
+        tmp = tempfile.NamedTemporaryFile(suffix=".html", delete=False)
+        output_path = tmp.name
+
+    net.save_graph(output_path)
+    return output_path
+
+
 def render_cell_neighborhood(client: Neo4jClient,
                               cell_id: str,
                               depth: int = 2,

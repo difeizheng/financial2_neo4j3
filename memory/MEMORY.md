@@ -1,0 +1,5 @@
+- [项目概览](project_overview.md) — 完整系统架构、四阶段完成情况、技术栈
+- [用户偏好](user_preferences.md) — 技术选择、工作方式、沟通风格
+- [技术细节](technical_details.md) — 公式解析、计算引擎、变更传播、LLM识别算法
+- [快速启动](quick_start.md) — CLI/Streamlit启动、常见操作、故障排查
+- [UI重构进度](ui_refactor_progress.md) — 6页面Streamlit UI完成状态、待优化项

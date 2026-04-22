@@ -31,6 +31,16 @@ def init_db() -> None:
                 updated_at  TEXT    NOT NULL
             )
         """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS scenarios (
+                id           INTEGER PRIMARY KEY AUTOINCREMENT,
+                name         TEXT    NOT NULL,
+                workbook_id  TEXT    NOT NULL,
+                changes_json TEXT    NOT NULL,
+                description  TEXT,
+                created_at   TEXT    NOT NULL
+            )
+        """)
 
 
 def create_task(filename: str, filepath: str,
