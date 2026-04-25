@@ -35,5 +35,9 @@ db/*.sqlite
 .DS_Store
 Thumbs.db
 
+# Excel files
+*.xlsx
+*.xls
+
 # Claude
 .claude/

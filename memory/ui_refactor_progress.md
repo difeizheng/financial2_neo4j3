@@ -33,12 +33,27 @@ PAGES字典映射：
 - 工作簿选择器（Neo4j Workbook节点）
 - 连接状态提示
 
-## 待优化
+## v1.1.0 已发布 (2026-04-22)
+
+**提交**: `51571e6` → main
+**变更**: 19 files, +1600/-258 lines
+
+已完成：
+- ✅ 6页面Streamlit UI框架
+- ✅ scenario_manager场景管理
+- ✅ propagator dry_run_with_comparison
+- ✅ queries.py查询封装
+- ✅ pyvis图谱可视化
+- ✅ simulation.py KeyError修复
+
+## 待办 (v2.0.0)
 
 - [ ] D3.js高性能可视化（58K节点）
-- [ ] 更多Excel函数支持
+- [ ] 更多Excel函数（VLOOKUP/INDEX/MATCH/SUMIFS）
 - [ ] 批量上传并行解析
 - [ ] 导出功能（Cypher/GraphML/CSV）
+- [ ] 变更历史审计日志
+- [ ] 多用户权限管理
 
-## Why: UI框架完成，功能可用，待性能优化。
-## How to apply: 新功能开发优先现有页面扩展，避免重写框架。
+## Why: v1.1.0稳定可用，待性能优化和功能扩展。
+## How to apply: 新功能优先现有页面扩展，D3.js可视化或Excel函数为下一步。

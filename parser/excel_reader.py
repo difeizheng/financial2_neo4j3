@@ -1,5 +1,7 @@
 import datetime
+import re
 import uuid
+from collections import defaultdict
 from typing import Optional
 import openpyxl
 from openpyxl.utils import get_column_letter
@@ -7,6 +9,50 @@ from openpyxl.utils import get_column_letter
 from .schema import CellNode, SheetNode, WorkbookNode
 from .formula_parser import parse_formula_refs
 from .section_detector import detect_sections
+
+# Common unit strings in Chinese financial models
+_UNIT_RE = re.compile(
+    r'^(万元|元|亿元|%|‰|年|月|日|天|季度|半年|'
+    r'MW|kW|GW|TW|kWh|MWh|GWh|TWh|万kWh|亿kWh|'
+    r'm|km|m²|km²|万m³|m³|t|万t|'
+    r'台|个|套|项|次|批|人|辆|度|万度|'
+    r'元/kWh|万元/MW|万元/kWh|元/MW|%/年)$'
+)
+
+
+def _detect_unit_col(ws, header_row: int, max_scan_rows: int = 60) -> Optional[int]:
+    """Detect which column (1-based) contains unit values for this sheet.
+
+    Priority: column header containing '单位' > column with highest unit-string density.
+    """
+    # 1. Header row: look for a cell whose value contains "单位"
+    for cell in ws[header_row]:
+        if cell.value and cell.column and '单位' in str(cell.value):
+            return cell.column
+
+    # 2. Scan rows: find column where most string values are known unit strings
+    col_unit_hits: dict[int, int] = defaultdict(int)
+    col_str_hits: dict[int, int] = defaultdict(int)
+    scan_end = min(header_row + max_scan_rows, ws.max_row)
+
+    for row in ws.iter_rows(min_row=header_row + 1, max_row=scan_end):
+        for cell in row:
+            if cell.value is None or cell.column is None:
+                continue
+            if isinstance(cell.value, str):
+                col_str_hits[cell.column] += 1
+                if _UNIT_RE.match(cell.value.strip()):
+                    col_unit_hits[cell.column] += 1
+
+    best_col: Optional[int] = None
+    best_ratio = 0.5  # require at least 50% unit strings in that column
+    for col, hits in col_unit_hits.items():
+        total = col_str_hits.get(col, 0)
+        if total >= 3 and hits / total > best_ratio:
+            best_ratio = hits / total
+            best_col = col
+
+    return best_col
 
 
 def _cell_value_type(value) -> str:
@@ -96,6 +142,9 @@ def parse_sheet(wb_formula, wb_values, sheet_name: str,
         sheet_meta={"max_row": max_row, "max_col": max_col},
     )
 
+    # Detect unit column once per sheet (avoids hardcoding col J)
+    unit_col_num = _detect_unit_col(ws_f, header_row)
+
     # Build row → section_id lookup
     row_to_section: dict[int, str] = {}
     for sec in sections:
@@ -135,9 +184,12 @@ def parse_sheet(wb_formula, wb_values, sheet_name: str,
             k_cell = ws_f.cell(row=row_num, column=11)
             description = str(k_cell.value).strip() if k_cell.value and not is_head else None
 
-            # unit: value in col J of same row
-            j_cell = ws_f.cell(row=row_num, column=10)
-            unit = str(j_cell.value).strip() if j_cell.value and not is_head else None
+            # unit: from detected unit column (per-sheet), not hardcoded col J
+            unit = None
+            if unit_col_num and not is_head:
+                u_cell = ws_f.cell(row=row_num, column=unit_col_num)
+                if u_cell.value:
+                    unit = str(u_cell.value).strip()
 
             cells.append(CellNode(
                 id=cell_id,

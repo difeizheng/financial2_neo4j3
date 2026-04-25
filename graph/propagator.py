@@ -41,9 +41,8 @@ class Propagator:
         # 3. Topological sort
         order = self._topo_sort(subgraph)
 
-        # 4. Fetch current values for all cells in scope
-        all_ids = list(subgraph.keys())
-        cell_values = self._fetch_values(all_ids)
+        # 4. Fetch current values for all cells in scope (including external deps)
+        cell_values = self._fetch_values_for_subgraph(subgraph)
 
         # Apply seed changes
         cell_values.update(changes)
@@ -79,8 +78,7 @@ class Propagator:
         subgraph = self._fetch_subgraph(list(changes.keys()) + list(downstream))
         order = self._topo_sort(subgraph)
 
-        all_ids = list(subgraph.keys())
-        cell_values = self._fetch_values(all_ids)
+        cell_values = self._fetch_values_for_subgraph(subgraph)
         old_values = dict(cell_values)
 
         cell_values.update(changes)
@@ -116,8 +114,7 @@ class Propagator:
         subgraph = self._fetch_subgraph(list(changes.keys()) + list(downstream))
         order = self._topo_sort(subgraph)
 
-        all_ids = list(subgraph.keys())
-        cell_values = self._fetch_values(all_ids)
+        cell_values = self._fetch_values_for_subgraph(subgraph)
         cell_values.update(changes)
 
         updated: dict[str, Any] = dict(changes)
@@ -205,6 +202,17 @@ class Propagator:
     # ------------------------------------------------------------------
     # Neo4j read/write helpers
     # ------------------------------------------------------------------
+
+    def _fetch_values_for_subgraph(self, subgraph: dict[str, list[str]]) -> dict[str, Any]:
+        """Fetch values for all cells in subgraph AND their external dependencies.
+
+        Without this, formulas like =A*B where only A is downstream would
+        resolve B as 0 (missing from cell_values), producing wrong results.
+        """
+        all_ids: set[str] = set(subgraph.keys())
+        for deps in subgraph.values():
+            all_ids.update(deps)  # include deps that aren't in the subgraph
+        return self._fetch_values(list(all_ids))
 
     def _fetch_values(self, cell_ids: list[str]) -> dict[str, Any]:
         if not cell_ids:
